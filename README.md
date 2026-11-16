@@ -58,5 +58,6 @@ el build de gyan.dev (Windows).
 - Meta cambia el panel seguido. Los datos se leyeron el 2026-11-15; el
   panel en vivo manda.
 - Las declaraciones legales, la grabación, la llave secreta y el envío son
-  tuyos. La skill le dice al agente que no los haga por ti.
+  tuyos. El agente solo marca una declaración si le dices "sí, márcalas", y
+  nunca escribe contraseñas ni lee llaves.
 - No es asesoría legal ni garantiza la aprobación.

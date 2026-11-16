@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from pathlib import Path
 
 import pytest
@@ -113,3 +114,34 @@ def test_lista_concat_escapa_comillas(tmp_path):
     carpeta = tmp_path / "John's"
     texto = video.lista_concat(carpeta, ["login"])
     assert texto == "file '" + str(carpeta.resolve() / "login.mp4").replace("'", "'\\''") + "'\n"
+
+
+def test_armar_lee_y_escribe_utf8(tmp_path, monkeypatch):
+    """El spec y los archivos de trabajo van en UTF-8 aunque el sistema use otra
+    codificación (Windows usa cp1252 por defecto)."""
+    llamadas = []
+    monkeypatch.setattr(video, "_requiere", lambda b: None)
+    monkeypatch.setattr(video, "_ffmpeg", lambda *a, **k: llamadas.append(a))
+    base = tmp_path / "José"
+    base.mkdir()
+    toma = base / "Grabación.mp4"
+    toma.write_bytes(b"")
+    spec = {"salida": "out", "segmentos": {"a": [toma.name, 0, 2]},
+            "videos": {"v": {"partes": ["a"], "subtitulos": [[0, 2, "Configuración (Settings)"]]}}}
+    ruta = base / "spec.json"
+    ruta.write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
+    real = Path.read_text
+    monkeypatch.setattr(Path, "read_text", lambda self, encoding=None, **k: real(self, encoding=encoding or "cp1252", **k))
+    video.armar(ruta)
+    trabajo = base / "out" / ".tramos"
+    assert "Configuración" in (trabajo / "v.ass").read_bytes().decode("utf-8")
+    assert "José" in (trabajo / "v.txt").read_bytes().decode("utf-8")
+
+
+def test_hoja_toma_el_cuadro_del_inicio_de_cada_intervalo(tmp_path, monkeypatch):
+    filtros = []
+    monkeypatch.setattr(video, "_requiere", lambda b: None)
+    monkeypatch.setattr(video.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": "10.0"})())
+    monkeypatch.setattr(video, "_ffmpeg", lambda *a, **k: filtros.append(a[a.index("-vf") + 1]))
+    video.hoja(tmp_path / "t.mp4", 2.0, tmp_path / "h.png")
+    assert filtros[0].startswith("fps=1/2.0:round=up,")

@@ -168,7 +168,7 @@ def _requiere(binario: str) -> None:
 
 def armar(ruta_spec: Path) -> None:
     _requiere("ffmpeg")
-    spec = json.loads(ruta_spec.read_text())
+    spec = json.loads(ruta_spec.read_text(encoding="utf-8"))
     base = ruta_spec.resolve().parent
     largos = validar(spec, base)
     salida = Path(spec.get("salida") or "out")
@@ -184,14 +184,14 @@ def armar(ruta_spec: Path) -> None:
                 "-c:v", "libx264", "-preset", "medium", "-crf", "20", str(trabajo / f"{nombre}.mp4"))
     for vnombre, v in spec["videos"].items():
         lista = trabajo / f"{vnombre}.txt"
-        lista.write_text(lista_concat(trabajo, v["partes"]))
+        lista.write_text(lista_concat(trabajo, v["partes"]), encoding="utf-8")
         crudo = trabajo / f"{vnombre}_crudo.mp4"
         _ffmpeg("-f", "concat", "-safe", "0", "-i", str(lista), "-c", "copy", str(crudo))
         destino = salida / f"{vnombre}.mp4"
         subs = v.get("subtitulos") or []
         if subs:
             archivo_ass = trabajo / f"{vnombre}.ass"
-            archivo_ass.write_text(ass(subs))
+            archivo_ass.write_text(ass(subs), encoding="utf-8")
             # Nombre relativo con cwd=trabajo: en el filtro de ffmpeg, ':' y '\'
             # de una ruta absoluta (C:\... en Windows) rompen la opción.
             _ffmpeg("-i", str(crudo.resolve()), "-vf", f"subtitles={archivo_ass.name}",
@@ -212,7 +212,7 @@ def hoja(video: Path, cada: float, salida: Path) -> None:
     cols = min(7, n)
     filas = (n + cols - 1) // cols
     _ffmpeg("-i", str(video), "-vf",
-            f"fps=1/{cada},scale=384:-1,tile={cols}x{filas}",
+            f"fps=1/{cada}:round=up,scale=384:-1,tile={cols}x{filas}",
             "-frames:v", "1", str(salida))
     print(f"{salida}: {n} cuadros, uno cada {cada} s (fila por fila, de izquierda a derecha; el primero es 0 s)")
 
