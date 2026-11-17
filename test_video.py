@@ -130,8 +130,10 @@ def test_armar_lee_y_escribe_utf8(tmp_path, monkeypatch):
             "videos": {"v": {"partes": ["a"], "subtitulos": [[0, 2, "Configuración (Settings)"]]}}}
     ruta = base / "spec.json"
     ruta.write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
-    real = Path.read_text
-    monkeypatch.setattr(Path, "read_text", lambda self, encoding=None, **k: real(self, encoding=encoding or "cp1252", **k))
+    leer, escribir = Path.read_text, Path.write_text
+    monkeypatch.setattr(Path, "read_text", lambda self, encoding=None, **k: leer(self, encoding=encoding or "cp1252", **k))
+    monkeypatch.setattr(Path, "write_text",
+                        lambda self, data, encoding=None, **k: escribir(self, data, encoding=encoding or "cp1252", **k))
     video.armar(ruta)
     trabajo = base / "out" / ".tramos"
     assert "Configuración" in (trabajo / "v.ass").read_bytes().decode("utf-8")
@@ -145,3 +147,78 @@ def test_hoja_toma_el_cuadro_del_inicio_de_cada_intervalo(tmp_path, monkeypatch)
     monkeypatch.setattr(video, "_ffmpeg", lambda *a, **k: filtros.append(a[a.index("-vf") + 1]))
     video.hoja(tmp_path / "t.mp4", 2.0, tmp_path / "h.png")
     assert filtros[0].startswith("fps=1/2.0:round=up,")
+
+
+@pytest.mark.parametrize("dur,cada,esperado", [("6.0", 2.0, 3), ("6.5", 2.0, 4), ("10.0", 0.5, 20), ("0.4", 2.0, 1)])
+def test_hoja_cuenta_los_cuadros_que_da_ffmpeg(tmp_path, monkeypatch, capsys, dur, cada, esperado):
+    monkeypatch.setattr(video, "_requiere", lambda b: None)
+    monkeypatch.setattr(video.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": dur})())
+    monkeypatch.setattr(video, "_ffmpeg", lambda *a, **k: None)
+    video.hoja(tmp_path / "t.mp4", cada, tmp_path / "h.png")
+    assert f": {esperado} cuadros" in capsys.readouterr().out
+
+
+def test_hoja_rechaza_cada_cero(capsys):
+    with pytest.raises(SystemExit):
+        video.main(["hoja", "t.mp4", "--cada", "0"])
+    assert "mayor que 0" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("contenido", ['{"segmentos": {"a": ["t.mp4", "x", 2]}, "videos": {"v": {"partes": ["a"]}}}',
+                                       '{"segmentos": {"a": ["t.mp4", 0, 2]}, "videos": {"v": ["a"]}}',
+                                       '{no es json'])
+def test_spec_mal_armado_da_mensaje_y_no_traceback(tmp_path, monkeypatch, capsys, contenido):
+    monkeypatch.setattr(video, "_requiere", lambda b: None)
+    ruta = tmp_path / "spec.json"
+    ruta.write_text(contenido, encoding="utf-8")
+    assert video.main(["armar", str(ruta)]) == 2
+    assert capsys.readouterr().err.startswith("spec: ")
+
+
+def test_cajas_fuera():
+    assert video.cajas_fuera([[0, 1900, 100, 10], [0, 0, 10, 10], [2000, 0, 5, 5]], 1920, 1080) == \
+        [[0, 1900, 100, 10], [2000, 0, 5, 5]]
+
+
+def test_armar_sin_subtitulos_usa_faststart(tmp_path, monkeypatch):
+    llamadas = []
+    monkeypatch.setattr(video, "_requiere", lambda b: None)
+    monkeypatch.setattr(video, "_ffmpeg", lambda *a, **k: llamadas.append(a))
+    (tmp_path / "t.mp4").write_bytes(b"")
+    spec = {"segmentos": {"a": ["t.mp4", 0, 2]}, "videos": {"v": {"partes": ["a"]}}}
+    (tmp_path / "spec.json").write_text(json.dumps(spec), encoding="utf-8")
+    video.armar(tmp_path / "spec.json")
+    assert "+faststart" in llamadas[-1]
+
+
+def test_error_de_ffprobe_dice_ffprobe(tmp_path, monkeypatch, capsys):
+    import subprocess
+    monkeypatch.setattr(video, "_requiere", lambda b: None)
+    def falla(*a, **k):
+        raise subprocess.CalledProcessError(1, ["ffprobe", "x"])
+    monkeypatch.setattr(video.subprocess, "run", falla)
+    assert video.main(["hoja", str(tmp_path / "t.mp4")]) == 1
+    assert capsys.readouterr().err.startswith("ffprobe falló")
+
+
+def test_duracion_video_prefiere_el_flujo_de_video(monkeypatch):
+    salidas = iter(["duration=6.000000\n", "6.100000\n"])
+    monkeypatch.setattr(video.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": next(salidas)})())
+    assert video.duracion_video(Path("t.mp4")) == 6.0
+
+
+def test_duracion_video_usa_el_contenedor_si_el_flujo_no_dice(monkeypatch):
+    salidas = iter(["duration=N/A\n", "6.100000\n"])
+    monkeypatch.setattr(video.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": next(salidas)})())
+    assert video.duracion_video(Path("t.mp4")) == 6.1
+
+
+@pytest.mark.parametrize("texto,esperado", [
+    ("duration=6.000000\n", 6.0),
+    ("duration=N/A\nTAG:DURATION=00:00:06.000000000\n", 6.0),
+    ("TAG:DURATION=01:02:03.500000000\n", 3723.5),
+    ("duration=N/A\n", None),
+    ("TAG:DURATION=raro\n", None),
+])
+def test_duracion_de_flujo(texto, esperado):
+    assert video.duracion_de_flujo(texto) == esperado

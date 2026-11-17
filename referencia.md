@@ -23,7 +23,8 @@ actualización):
 - [Visión general de Instagram](https://developers.facebook.com/documentation/instagram-platform/overview):
   Unified Login, Instagram Login y Facebook Login.
 - [Referencia de ad sets](https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/adsets)
-  y la página "Currency codes" de la Marketing API (offset por moneda).
+  y la tabla "Currency codes" de la Marketing API (offset por moneda), que
+  enlaza la guía de [budget splits](https://developers.facebook.com/documentation/ads-commerce/marketing-api/product-set-optimization/budget-splits).
 
 Diferencias dentro de la propia documentación de Meta:
 - El permiso de publicar sale como `instagram_business_content_publish` en
@@ -93,7 +94,7 @@ Instagram**
 llaves):
 
 ```bash
-grep -q '^META_APP_SECRET=' <ruta>/.env && echo "ya está" || { read -rsp "secret: " S && echo "META_APP_SECRET=$S" >> <ruta>/.env && unset S && echo ok; }
+grep -qs '^META_APP_SECRET=' <ruta>/.env && echo "ya está" || ( umask 077; read -rsp "secret: " S && echo "META_APP_SECRET=$S" >> <ruta>/.env && echo ok )
 ```
 
 Para comprobar la llave sin leerla, corre esto **donde la app ya carga su
