@@ -126,6 +126,8 @@ def validar(spec: dict, base: Path) -> dict:
         seg[0] = str(ruta if ruta.is_absolute() else (base / ruta))
     largo_video: dict[str, float] = {}
     for vnombre, v in spec["videos"].items():
+        if not isinstance(v, dict):
+            raise ErrorSpec(f"el video '{vnombre}' es un objeto con 'partes' y 'subtitulos'")
         partes = v.get("partes") or []
         if not partes:
             raise ErrorSpec(f"el video '{vnombre}' no tiene partes")
@@ -166,6 +168,25 @@ def _requiere(binario: str) -> None:
         sys.exit(f"falta {binario} en el PATH")
 
 
+def medidas(video: Path) -> tuple[int, int] | None:
+    """Ancho y alto de una toma, o None si ffprobe no los da."""
+    if not shutil.which("ffprobe"):
+        return None
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                        "stream=width,height", "-of", "csv=p=0:s=x", str(video)],
+                       capture_output=True, text=True)
+    try:
+        ancho, alto = r.stdout.strip().split("x")[:2]
+        return int(ancho), int(alto)
+    except ValueError:
+        return None
+
+
+def cajas_fuera(cajas: list[list], ancho: int, alto: int) -> list[list]:
+    """Las cajas de `tapar` que no tocan el cuadro de la toma."""
+    return [c for c in cajas if c[0] >= ancho or c[1] >= alto]
+
+
 def armar(ruta_spec: Path) -> None:
     _requiere("ffmpeg")
     spec = json.loads(ruta_spec.read_text(encoding="utf-8"))
@@ -179,6 +200,10 @@ def armar(ruta_spec: Path) -> None:
     for nombre, (archivo, a, b) in spec["segmentos"].items():
         if not Path(archivo).is_file():
             sys.exit(f"no existe el archivo del segmento '{nombre}': {archivo}")
+        tam = medidas(Path(archivo)) if tapas.get(nombre) else None
+        if tam and (fuera := cajas_fuera(tapas[nombre], *tam)):
+            print(f"aviso: en '{nombre}' ({tam[0]}x{tam[1]}) estas cajas de 'tapar' quedan fuera del cuadro: {fuera}",
+                  file=sys.stderr)
         _ffmpeg("-ss", str(a), "-to", str(b), "-i", archivo,
                 "-vf", filtro_tramo(tapas.get(nombre)), "-an",
                 "-c:v", "libx264", "-preset", "medium", "-crf", "20", str(trabajo / f"{nombre}.mp4"))
@@ -198,17 +223,59 @@ def armar(ruta_spec: Path) -> None:
                     "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-movflags", "+faststart",
                     str(destino.resolve()), cwd=trabajo)
         else:
-            shutil.copyfile(crudo, destino)
+            _ffmpeg("-i", str(crudo), "-c", "copy", "-movflags", "+faststart", str(destino))
         print(f"{destino}: {largos[vnombre]:.1f} s")
+
+
+def _numero(texto: str) -> float | None:
+    try:
+        valor = float(texto.strip().splitlines()[0])
+    except (ValueError, IndexError):
+        return None
+    return valor if math.isfinite(valor) and valor > 0 else None
+
+
+def duracion_de_flujo(texto: str) -> float | None:
+    """Lee `duration=6.000` (MP4) o `TAG:DURATION=00:00:06.000000000` (WebM,
+    MKV) de la salida de ffprobe."""
+    for linea in texto.splitlines():
+        clave, _, valor = linea.partition("=")
+        if clave == "duration" and (d := _numero(valor)) is not None:
+            return d
+    for linea in texto.splitlines():
+        clave, _, valor = linea.partition("=")
+        if clave.upper() == "TAG:DURATION":
+            try:
+                h, m, seg = valor.strip().split(":")
+                d = int(h) * 3600 + int(m) * 60 + float(seg)
+            except ValueError:
+                continue
+            if math.isfinite(d) and d > 0:
+                return d
+    return None
+
+
+def duracion_video(video: Path) -> float:
+    """La duración del flujo de video. La del contenedor incluye el audio, que
+    puede durar más y sumar un cuadro que ffmpeg no entrega."""
+    flujo = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+         "stream=duration:stream_tags=DURATION", "-of", "default=nw=1", str(video)],
+        check=True, capture_output=True, text=True).stdout
+    if (d := duracion_de_flujo(flujo)) is not None:
+        return d
+    formato = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(video)],
+        check=True, capture_output=True, text=True).stdout
+    return _numero(formato) or 0.0
 
 
 def hoja(video: Path, cada: float, salida: Path) -> None:
     _requiere("ffmpeg")
     _requiere("ffprobe")
-    dur = float(subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(video)],
-        check=True, capture_output=True, text=True).stdout.strip() or 0)
-    n = max(1, int(dur // cada) + 1)
+    video = video.resolve()  # una ruta relativa como "a:b.mp4" no se lee como protocolo
+    dur = duracion_video(video)
+    n = max(1, math.ceil(dur / cada - 1e-9))  # fps=1/cada:round=up da un cuadro en 0, cada, 2*cada... < dur
     cols = min(7, n)
     filas = (n + cols - 1) // cols
     _ffmpeg("-i", str(video), "-vf",
@@ -220,8 +287,15 @@ def hoja(video: Path, cada: float, salida: Path) -> None:
 def cuadro(video: Path, en: float, recorte: str | None, salida: Path) -> None:
     _requiere("ffmpeg")
     filtros = ["-vf", f"crop={recorte}"] if recorte else []
-    _ffmpeg("-ss", str(en), "-i", str(video), "-frames:v", "1", *filtros, str(salida))
+    _ffmpeg("-ss", str(en), "-i", str(video.resolve()), "-frames:v", "1", *filtros, str(salida))
     print(salida)
+
+
+def _positivo(texto: str) -> float:
+    valor = float(texto)
+    if not (valor > 0 and math.isfinite(valor)):
+        raise argparse.ArgumentTypeError("tiene que ser un número mayor que 0")
+    return valor
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -229,7 +303,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     h = sub.add_parser("hoja")
     h.add_argument("video", type=Path)
-    h.add_argument("--cada", type=float, default=2.0)
+    h.add_argument("--cada", type=_positivo, default=2.0)
     h.add_argument("--salida", type=Path, default=Path("hoja.png"))
     c = sub.add_parser("cuadro")
     c.add_argument("video", type=Path)
@@ -249,8 +323,16 @@ def main(argv: list[str] | None = None) -> int:
     except ErrorSpec as e:
         print(f"spec: {e}", file=sys.stderr)
         return 2
+    except json.JSONDecodeError as e:
+        print(f"spec: el JSON no es válido ({e})", file=sys.stderr)
+        return 2
+    except (ValueError, TypeError, AttributeError, KeyError) as e:
+        donde = "spec" if args.cmd == "armar" else "error"
+        print(f"{donde}: forma inválida ({type(e).__name__}: {e})", file=sys.stderr)
+        return 2
     except subprocess.CalledProcessError as e:
-        print(f"ffmpeg falló ({e.returncode})", file=sys.stderr)
+        programa = Path(str(e.cmd[0])).name if e.cmd else "ffmpeg"
+        print(f"{programa} falló ({e.returncode})", file=sys.stderr)
         return 1
     return 0
 

@@ -55,8 +55,9 @@ el build de gyan.dev (Windows).
 
 ## Límites
 
-- Meta cambia el panel seguido. Los datos se leyeron el 2026-11-15; el
-  panel en vivo manda.
+- Meta cambia el panel seguido. El panel se leyó el 2026-11-15 y la
+  documentación de Meta se contrastó el 2026-11-16 (fuentes en
+  `referencia.md`). El panel en vivo manda.
 - Las declaraciones legales, la grabación, la llave secreta y el envío son
   tuyos. El agente solo marca una declaración si le dices "sí, márcalas", y
   nunca escribe contraseñas ni lee llaves.

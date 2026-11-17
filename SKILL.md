@@ -123,9 +123,12 @@ El borrador no se envía solo: se puede armar y desarmar sin riesgo.
 - El negocio conecta su cuenta profesional desde los ajustes de tu app
   (`https://www.instagram.com/oauth/authorize`). Solo web. Una app usa
   Facebook Login o Instagram Login, no las dos.
-- **El token dura 60 días.** El código vale 1 hora y una sola vez; el token
-  largo se renueva con `refresh_access_token` cuando tiene al menos 24 h y
-  antes de vencer. Sin renovación, la conexión muere a los 60 días.
+- **El token largo dura 60 días.** El código vale 1 hora y una sola vez, y
+  se canjea por un token **corto**. El backend canjea ese token corto por el
+  largo con `GET graph.instagram.com/access_token?grant_type=ig_exchange_token`.
+  Guarda solo el largo: el corto es de vida corta y no se renueva. El largo se
+  renueva con `refresh_access_token` cuando tiene al menos 24 h y antes de
+  vencer. Sin renovación, la conexión muere a los 60 días.
 - **No pidas en el login un permiso que siga en estándar** si se conectan
   cuentas sin rol en la app: Meta rechaza su login. Activa los permisos
   nuevos solo en la instancia que usa el revisor hasta que Meta apruebe.
@@ -283,8 +286,8 @@ python3 -I $V hoja salida/app_permiso.mp4 --cada 0.5        # revisa el video ar
 2. **Una configuración de FLfB no cambia** su tipo de token ni su
    vencimiento. Para sumar Páginas, crea otra configuración.
 3. **"60 días (recomendado)"** exige un flujo de renovación. Sin él, elige
-   "Nunca", o las conexiones mueren calladas a los 60 días. El token de
-   Instagram Login siempre dura 60 días: ahí la renovación es obligatoria.
+   "Nunca", o las conexiones mueren calladas a los 60 días. El token largo
+   de Instagram Login siempre dura 60 días: ahí la renovación es obligatoria.
 4. **FLfB pide `public_profile` en acceso avanzado.** Es gratis y sin
    revisión, pero trae una declaración y el cuestionario de tratamiento de
    datos.
