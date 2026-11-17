@@ -162,8 +162,9 @@ El borrador no se envía solo: se puede armar y desarmar sin riesgo.
   métricas). Revisa la URL que está en el panel, no solo la de tu app.
 - Los textos dicen exactamente lo que pides y recibes. No prometas datos
   que no llegan (trampa 1).
-- Todo apagado mientras falte una variable (id de la app, llave secreta,
-  `config_id`).
+- Todo apagado mientras falte una variable: el id y la llave secreta de la
+  app en las dos rutas, y el `config_id` solo en la ruta A (Instagram Login
+  no lo usa).
 
 ### 2 · Panel de Meta
 
