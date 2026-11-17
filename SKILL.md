@@ -7,8 +7,10 @@ description: Guía de punta a punta para sacar una app en Meta pidiendo acceso a
 
 Sale de dos App Reviews reales hechos en noviembre de 2026: una app de
 anuncios con Facebook Login for Business y una app de Instagram (comentarios,
-mensajes, métricas y publicar). Los datos del panel se leyeron el
-2026-11-15. **El panel de Meta en vivo manda sobre esta guía.**
+mensajes, métricas y publicar). El panel se leyó el 2026-11-15 y la
+documentación de Meta se contrastó el 2026-11-16 (fuentes en
+`referencia.md`). Cuando algo viene del panel y no de la documentación, la
+guía lo dice. **El panel de Meta en vivo manda sobre esta guía.**
 
 ## ¿Necesitas App Review?
 
@@ -26,6 +28,13 @@ Elige la ruta:
 | **A · Facebook Login for Business** | Anuncios, páginas, portfolios comerciales | `ads_read`, `ads_management`, `business_management`, `pages_*`, Marketing API Access Tier |
 | **B · Instagram API con Instagram Login** | DMs, comentarios, métricas y publicar en cuentas profesionales de Instagram | `instagram_business_basic`, `_manage_messages`, `_manage_comments`, `_manage_insights`, `_content_publish` |
 
+**Para una integración nueva de Instagram,** Meta recomienda hoy la
+[Instagram API with Unified Login](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-unified-login):
+la persona entra con Instagram o con Facebook, sin página de Facebook. A
+Instagram Login la presenta como la opción de las integraciones que ya
+existen. Esta guía se probó con Instagram Login: el App Review es el mismo
+proceso, pero lee la página de Unified Login antes de construir.
+
 Las plantillas de texto, la lista del panel y los guiones están en
 [`referencia.md`](referencia.md).
 
@@ -36,19 +45,28 @@ Permisos y funciones › "Solicitar acceso avanzado" en cada permiso, y entra
 a "Continuar con la solicitud" › Uso permitido. Cada tarjeta lista sus
 requisitos, y algunos solo aparecen ahí:
 
-- **Un permiso con 0 llamadas no se puede pedir.** Su botón queda gris hasta
-  una llamada de prueba correcta a la API, y el contador tarda **hasta 24 h**
-  en sumarla. Haz la primera llamada real de cada permiso apenas tengas la
-  app arriba.
-- `ads_management` exige `pages_read_engagement` en la misma solicitud.
+- **Un permiso con 0 llamadas no se puede pedir.** Meta pide al menos una
+  llamada correcta por permiso **en los 30 días antes de enviar**, y el botón
+  "Solicitar acceso avanzado" queda gris hasta que la registra. La
+  documentación dice que la registra en hasta 2 días; el panel decía hasta
+  24 h. Haz la primera llamada real de cada permiso apenas tengas la app
+  arriba.
+- **Dependencias:** según la referencia de permisos, `ads_management` y
+  `business_management` dependen de `pages_read_engagement` y
+  `pages_show_list`. El formulario dice cuál exige en tu solicitud: en una
+  app real, `ads_management` pidió `pages_read_engagement` en la misma
+  solicitud.
 - Insights y comentarios de Instagram exigen `instagram_business_basic` en
   la misma solicitud.
-- El Marketing API Access Tier pide 500 llamadas con menos de 15 % de error.
-  Los datos tardan hasta 24 h en verse.
-- **Comentarios de Instagram:** el video muestra a un usuario comentando y
-  la respuesta de la cuenta (o el DM) **en menos de 30 s**. La descripción
-  lleva el enlace a un post con la automatización ya activa y la palabra que
-  el revisor debe comentar. Nunca des credenciales de Instagram.
+- **Marketing API Access Tier:** desde 2026 los niveles se llaman Limited y
+  Full (antes Standard y Advanced). Full pide 500 o más llamadas a la
+  Marketing API en los últimos 15 días y menos de 15 % de error en las
+  últimas 500. Para subir de nivel ya no se pide screencast.
+- **Comentarios de Instagram** (lo pide la tarjeta del panel, no la
+  documentación): el video muestra a un usuario comentando y la respuesta de
+  la cuenta (o el DM) **en menos de 30 s**. La descripción lleva el enlace a
+  un post con la automatización ya activa y la palabra que el revisor debe
+  comentar. Nunca des credenciales de Instagram.
 
 El borrador no se envía solo: se puede armar y desarmar sin riesgo.
 
@@ -89,8 +107,11 @@ El borrador no se envía solo: se puede armar y desarmar sin riesgo.
 
 - Un **link de conexión por cliente**, secreto: guarda solo su hash, que
   venza y se pueda revocar.
-- Login con `config_id` (sin `scope`), `response_type=code` y
-  `override_default_response_type=true`.
+- Login con `config_id` (reemplaza a `scope`, que no se usa),
+  `response_type=code` y `override_default_response_type=true`. Con token
+  de usuario del sistema de integración, el login solo se pide desde web.
+- Tipo de token: el de **usuario del sistema de integración** no vence por
+  defecto y sirve para servidor a servidor; el de usuario es de vida corta.
 - `state` OAuth de un solo uso y con vencimiento. El token del link va en
   una cookie HttpOnly, para que nunca viaje a Facebook.
 - Canje del código en el backend y `debug_token` para validar que el token
@@ -99,13 +120,31 @@ El borrador no se envía solo: se puede armar y desarmar sin riesgo.
 
 **Ruta B · Instagram Login:**
 
-- El negocio conecta su cuenta profesional desde los ajustes de tu app.
+- El negocio conecta su cuenta profesional desde los ajustes de tu app
+  (`https://www.instagram.com/oauth/authorize`). Solo web. Una app usa
+  Facebook Login o Instagram Login, no las dos.
+- **El token dura 60 días.** El código vale 1 hora y una sola vez; el token
+  largo se renueva con `refresh_access_token` cuando tiene al menos 24 h y
+  antes de vencer. Sin renovación, la conexión muere a los 60 días.
 - **No pidas en el login un permiso que siga en estándar** si se conectan
   cuentas sin rol en la app: Meta rechaza su login. Activa los permisos
   nuevos solo en la instancia que usa el revisor hasta que Meta apruebe.
-- Publicar: Meta descarga el archivo desde una URL tuya, temporal y difícil
-  de adivinar. Después vienen el contenedor, `status_code` y
-  `media_publish`.
+- Publicar: Meta descarga el archivo desde una URL tuya, pública en ese
+  momento, temporal y difícil de adivinar. Después vienen el contenedor,
+  `status_code` y `media_publish`.
+  - Imágenes: solo JPEG.
+  - El contenedor vence a las 24 h. Meta sugiere consultar el estado una
+    vez por minuto, hasta 5 minutos.
+  - Límite: la documentación dice 100 publicaciones por API en 24 h en un
+    lugar y 50 en otro. Consulta `/<IG_ID>/content_publishing_limit`.
+  - Desde junio de 2026, `is_ai_generated=true` pone la etiqueta de IA.
+- Métricas: usa `views`. `impressions`, `plays` y `video_views` ya no
+  existen (2025).
+- Borrar posts por la API (Delete Media, diciembre de 2025, permiso
+  `instagram_manage_contents`) **solo existe con Instagram API with
+  Facebook Login**. Con Instagram Login, los posts se borran a mano.
+- Respuesta privada a un comentario: dentro de 7 días del comentario y un
+  solo mensaje. Otro mensaje solo si la persona responde, y dentro de 24 h.
 - Moderar: responder, ocultar o mostrar, y borrar con confirmación. Cada
   acción es un clic de una persona.
 
@@ -142,6 +181,18 @@ Meta valida que las URLs respondan.
    revisor comenta y no le llega el DM, rechaza.
 
 ### 4 · Grabación (la persona)
+
+**Reglas de Meta para el screencast:**
+- 1080p o más. Meta sugiere bajar el ancho del monitor a 1440 o menos.
+- La interfaz en inglés si se puede. Si no, subtítulos y notas que
+  expliquen cada botón.
+- Sin audio: los revisores no lo escuchan.
+- Usa el mouse en vez del teclado, con el cursor más grande.
+- Muestra el login completo y el momento en que la persona da cada permiso.
+  Cierra antes la sesión de cualquier cuenta de prueba.
+- Un permiso sin screencast no se aprueba.
+
+**Cómo grabar:**
 
 - **Grabador de pantalla:**
   - macOS: Cmd+Shift+5 › "Grabar toda la pantalla".
@@ -211,7 +262,11 @@ python3 -I $V hoja salida/app_permiso.mp4 --cada 0.5        # revisa el video ar
     traducción.
 - **"Enviar para revisión":** abre una confirmación con la casilla
   "Confirmo y acepto…" de la persona. Después no se puede editar ni
-  cancelar. Meta dice unos 20 días.
+  cancelar. La documentación dice que la decisión llega en una semana (casi
+  siempre en 2 o 3 días); para una app de Instagram, en noviembre de 2026,
+  el panel dijo unos 20 días.
+- Meta prueba con sus propias cuentas de prueba. Nunca pongas las
+  credenciales de tu cuenta personal de Facebook o Instagram.
 - **Envío parcial:** si un permiso todavía está en 0, manda los que estén
   listos y deja ese para otra solicitud. Quita su sección de las
   instrucciones.
@@ -228,14 +283,16 @@ python3 -I $V hoja salida/app_permiso.mp4 --cada 0.5        # revisa el video ar
 2. **Una configuración de FLfB no cambia** su tipo de token ni su
    vencimiento. Para sumar Páginas, crea otra configuración.
 3. **"60 días (recomendado)"** exige un flujo de renovación. Sin él, elige
-   "Nunca", o las conexiones mueren calladas a los 60 días.
+   "Nunca", o las conexiones mueren calladas a los 60 días. El token de
+   Instagram Login siempre dura 60 días: ahí la renovación es obligatoria.
 4. **FLfB pide `public_profile` en acceso avanzado.** Es gratis y sin
    revisión, pero trae una declaración y el cuestionario de tratamiento de
    datos.
 5. **La comprobación de uso de datos vence** y restringe toda la API.
 6. **El botón "Upgrade"** del Marketing API Access Tier mete el permiso al
    borrador. Se quita con la papelera.
-7. **0 llamadas = botón gris** hasta 24 h después de la primera llamada.
+7. **0 llamadas = botón gris** hasta que Meta registra la primera llamada:
+   hasta 2 días según la documentación (el panel decía 24 h).
 8. **Un permiso estándar en el login** rompe el login de toda cuenta sin
    rol en la app.
 9. **Comentarios en estándar:** Meta manda los webhooks de comentarios solo
@@ -244,7 +301,14 @@ python3 -I $V hoja salida/app_permiso.mp4 --cada 0.5        # revisa el video ar
 10. **La demo del revisor apagada** es rechazo seguro.
 11. **Consentimiento corto** en una cuenta ya conectada: no muestra los
     permisos.
-12. **Monedas sin decimales:** Meta las maneja en unidades enteras.
+12. **Monedas:** cada moneda tiene un "offset" en la Marketing API (página
+    Currency codes). USD tiene 100: un 1 es 0,01 USD. COP, JPY y KRW
+    tienen 1: un 1 es un peso, un yen o un won. En una app real, un ×100
+    fijo de "centavos" multiplicó un presupuesto en COP.
+13. **Versiones:** en Graph API la más nueva es v27.0 y v21.0 se retira el
+    2027-01-21. En la Marketing API, v27.0 salió el 2026-11-04, v24.0 venció
+    el 2026-11-10 y v25.0 vence el 2027-02-23. Revisa los changelogs antes
+    de enviar.
 
 ## Más rápido
 

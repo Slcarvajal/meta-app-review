@@ -3,11 +3,45 @@
 Cambia todo lo que va entre `<>` por los datos de tu app. Datos del panel
 leídos el 2026-11-15; el panel en vivo manda.
 
-Fuentes de Meta (leídas el 2026-11-15):
-- [ads_management](https://developers.facebook.com/docs/permissions/reference/ads_management/)
-- [Facebook Login for Business](https://developers.facebook.com/documentation/facebook-login/facebook-login-for-business)
-- [System user tokens](https://developers.facebook.com/docs/business-management-apis/system-users/install-apps-and-generate-tokens)
-- [Instagram Private Replies](https://developers.facebook.com/docs/instagram-platform/private-replies)
+Fuentes de Meta (leídas el 2026-11-16; ninguna muestra fecha de
+actualización):
+- [App Review: guía de envío](https://developers.facebook.com/documentation/resp-plat-initiatives/individual-processes/app-review/submission-guide.md):
+  screencast, llamadas de prueba, credenciales y plazos.
+- [App Review para la API de Instagram](https://developers.facebook.com/documentation/instagram-platform/app-review)
+  y su [changelog](https://developers.facebook.com/documentation/instagram-platform/changelog.md).
+- [Business Login for Instagram](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/business-login),
+  [publicación de contenido](https://developers.facebook.com/documentation/instagram-platform/content-publishing)
+  y [respuestas privadas](https://developers.facebook.com/documentation/instagram-platform/private-replies).
+- [Facebook Login for Business](https://developers.facebook.com/documentation/facebook-login/facebook-login-for-business).
+- Permisos: [ads_management](https://developers.facebook.com/docs/permissions/reference/ads_management/),
+  [ads_read](https://developers.facebook.com/docs/permissions/reference/ads_read/),
+  [business_management](https://developers.facebook.com/docs/permissions/reference/business_management/),
+  [pages_read_engagement](https://developers.facebook.com/docs/permissions/reference/pages_read_engagement/).
+- [Rate limiting de la Marketing API](https://developers.facebook.com/documentation/ads-commerce/marketing-api/overview/rate-limiting.md)
+  y su [changelog](https://developers.facebook.com/documentation/ads-commerce/marketing-api/marketing-api-changelog.md).
+- [System user tokens](https://developers.facebook.com/docs/business-management-apis/system-users/install-apps-and-generate-tokens).
+- [Visión general de Instagram](https://developers.facebook.com/documentation/instagram-platform/overview):
+  Unified Login, Instagram Login y Facebook Login.
+- [Referencia de ad sets](https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/adsets)
+  y la página "Currency codes" de la Marketing API (offset por moneda).
+
+Diferencias dentro de la propia documentación de Meta:
+- El permiso de publicar sale como `instagram_business_content_publish` en
+  Business Login y como `instagram_business_content_publishing` en la página
+  de App Review. Usa el que muestre tu panel.
+- `instagram_business_manage_insights` aparece en el panel, pero no en la
+  lista de la página de App Review.
+- El límite de publicaciones sale como 100 y como 50 en 24 h.
+- Algunas páginas todavía dicen "Standard" y "Advanced" para el Marketing
+  API Access Tier, y 1.500 llamadas en vez de 500.
+
+**Qué tiene que mostrar el screencast de los permisos de anuncios**
+(`ads_read`, `ads_management`, `business_management`, según la referencia):
+el login completo de Facebook con el permiso concedido, el negocio entrando
+a los datos de rendimiento, y esos datos en tu app (impresiones,
+conversiones, gasto, clics, alcance). Para `pages_read_engagement`: el login,
+la persona entrando al contenido de una publicación de su página, y ese
+contenido en tu app.
 
 ## Panel
 
